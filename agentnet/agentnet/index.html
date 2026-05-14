@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>AgentNet // Cyberpunk AI Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:#02040a}
+#scene{position:fixed;inset:0;z-index:1}
+#scene canvas{display:block;width:100%!important;height:100%!important}
+
+/* SCANLINE OVERLAY */
+#scanlines{position:fixed;inset:0;z-index:2;pointer-events:none;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.015) 2px,rgba(0,0,0,0.015) 4px)}
+#vignette{position:fixed;inset:0;z-index:2;pointer-events:none;background:radial-gradient(ellipse at center,transparent 60%,rgba(0,0,0,0.6) 100%)}
+
+/* FONTS */
+:root{--mono:'Share Tech Mono',monospace;--orb:'Orbitron',sans-serif}
+
+/* HUD TOP */
+#hud{position:fixed;top:0;left:0;right:0;height:48px;z-index:10;display:flex;align-items:center;gap:12px;padding:0 24px;background:rgba(2,4,10,0.8);border-bottom:1px solid rgba(0,255,200,0.1);backdrop-filter:blur(16px)}
+#hud::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(0,255,200,0.4),transparent)}
+.logo{font-family:var(--orb);font-size:13px;font-weight:700;color:#fff;letter-spacing:4px;text-shadow:0 0 20px rgba(0,255,200,0.5)}
+.logo em{color:#00ffc8;font-style:normal}
+.logo span{color:#ff4488}
+.pill{font-size:7px;padding:3px 8px;border-radius:2px;font-family:var(--mono);letter-spacing:.8px;font-weight:400;white-space:nowrap}
+.pg{background:rgba(0,255,80,0.08);color:#00ff50;border:1px solid rgba(0,255,80,0.2)}
+.pb{background:rgba(0,180,255,0.08);color:#00b4ff;border:1px solid rgba(0,180,255,0.2)}
+.py{background:rgba(255,200,0,0.08);color:#ffc800;border:1px solid rgba(255,200,0,0.2)}
+#hud-r{margin-left:auto;display:flex;align-items:center;gap:14px}
+#clock{font-family:var(--mono);font-size:10px;color:rgba(0,255,200,0.4);letter-spacing:2px}
+#fps{font-family:var(--mono);font-size:8px;color:rgba(255,255,255,0.15);letter-spacing:1px}
+
+/* MINI MAP */
+#minimap{position:fixed;top:60px;right:24px;z-index:10;width:120px;height:120px;background:rgba(2,4,10,0.85);border:1px solid rgba(0,255,200,0.15);backdrop-filter:blur(8px)}
+#minimap::before{content:'MAP';position:absolute;top:4px;left:6px;font-family:var(--mono);font-size:6px;color:rgba(0,255,200,0.3);letter-spacing:1px}
+#mm-canvas{position:absolute;inset:0}
+.mm-bracket{position:absolute;width:8px;height:8px}
+.mm-bracket.tl{top:2px;left:2px;border-top:1px solid rgba(0,255,200,0.4);border-left:1px solid rgba(0,255,200,0.4)}
+.mm-bracket.tr{top:2px;right:2px;border-top:1px solid rgba(0,255,200,0.4);border-right:1px solid rgba(0,255,200,0.4)}
+.mm-bracket.bl{bottom:2px;left:2px;border-bottom:1px solid rgba(0,255,200,0.4);border-left:1px solid rgba(0,255,200,0.4)}
+.mm-bracket.br{bottom:2px;right:2px;border-bottom:1px solid rgba(0,255,200,0.4);border-right:1px solid rgba(0,255,200,0.4)}
+
+/* FEED */
+#feed{position:fixed;left:24px;bottom:56px;z-index:10;width:240px;display:flex;flex-direction:column;gap:4px;pointer-events:none}
+.fi{background:rgba(2,4,12,0.88);border:1px solid rgba(255,255,255,0.07);padding:5px 10px;font-family:var(--mono);font-size:7px;color:rgba(255,255,255,0.45);display:flex;align-items:center;gap:7px;animation:fis .3s ease;letter-spacing:.3px;backdrop-filter:blur(8px)}
+@keyframes fis{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:translateX(0)}}
+.fd{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+
+/* AGENT STATUS BAR */
+#agent-bar{position:fixed;bottom:0;left:0;right:0;height:48px;z-index:10;background:rgba(2,4,10,0.9);border-top:1px solid rgba(0,255,200,0.08);display:flex;align-items:center;backdrop-filter:blur(12px)}
+.ab{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;height:100%;cursor:pointer;border-right:1px solid rgba(255,255,255,0.04);transition:background .15s;position:relative;overflow:hidden}
+.ab::before{content:'';position:absolute;inset:0;opacity:0;transition:opacity .15s}
+.ab:hover::before,.ab.active::before{opacity:1}
+.ab:last-child{border:none}
+.ab-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;animation:abp 2s ease-in-out infinite}
+@keyframes abp{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
+.ab-info{display:flex;flex-direction:column;gap:1px}
+.ab-name{font-family:var(--orb);font-size:8px;font-weight:700;color:rgba(255,255,255,.45);letter-spacing:1.5px}
+.ab.active .ab-name{color:#fff}
+.ab-status{font-family:var(--mono);font-size:6px;color:rgba(255,255,255,.2);letter-spacing:.5px}
+.ab-count{font-family:var(--mono);font-size:9px;font-weight:700;color:rgba(255,255,255,.18)}
+
+/* SIDE PANEL */
+#panel{position:fixed;right:0;top:48px;bottom:48px;width:0;overflow:hidden;z-index:20;transition:width .4s cubic-bezier(.4,0,.2,1)}
+#panel.open{width:320px}
+#panel-inner{width:320px;height:100%;background:rgba(2,4,12,0.97);border-left:1px solid rgba(0,255,200,0.12);display:flex;flex-direction:column;backdrop-filter:blur(24px)}
+.ph{padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;gap:12px;flex-shrink:0;position:relative;overflow:hidden}
+.ph::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px}
+.pav{width:44px;height:44px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;position:relative}
+.pav::after{content:'';position:absolute;inset:0;border-radius:4px;animation:av-glow 2s ease-in-out infinite}
+@keyframes av-glow{0%,100%{opacity:.6}50%{opacity:1}}
+.p-info{flex:1}
+.pn{font-family:var(--orb);font-size:11px;font-weight:700;color:#fff;letter-spacing:1.5px}
+.pr{font-family:var(--mono);font-size:7px;color:rgba(255,255,255,.25);margin-top:2px;letter-spacing:1.5px}
+.p-state{font-family:var(--mono);font-size:8px;font-weight:700;margin-top:4px;letter-spacing:1px}
+.px{width:28px;height:28px;background:rgba(255,0,80,.08);border:1px solid rgba(255,0,80,.2);color:rgba(255,0,80,.6);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:2px;flex-shrink:0;transition:all .15s}
+.px:hover{background:rgba(255,0,80,.2);color:#ff0050}
+
+/* STATS */
+.p-stats{display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid rgba(255,255,255,.05);flex-shrink:0}
+.ps{padding:10px 8px;text-align:center;border-right:1px solid rgba(255,255,255,.04);position:relative;overflow:hidden}
+.ps:last-child{border:none}
+.psv{font-family:var(--orb);font-size:16px;font-weight:700;line-height:1}
+.psl{font-family:var(--mono);font-size:6px;color:rgba(255,255,255,.2);margin-top:4px;letter-spacing:1.5px}
+
+/* PROGRESS BAR */
+.p-prog{padding:10px 16px;border-bottom:1px solid rgba(255,255,255,.05);flex-shrink:0}
+.prog-label{font-family:var(--mono);font-size:7px;color:rgba(255,255,255,.2);letter-spacing:1.5px;margin-bottom:6px;display:flex;justify-content:space-between}
+.prog-bar{height:3px;background:rgba(255,255,255,.06);border-radius:1px;overflow:hidden;margin-bottom:6px}
+.prog-fill{height:100%;border-radius:1px;transition:width .5s ease}
+
+/* TASK LOG */
+.p-tasks{padding:10px 16px;border-bottom:1px solid rgba(255,255,255,.05);flex-shrink:0}
+.pt-head{font-family:var(--mono);font-size:7px;color:rgba(255,255,255,.18);letter-spacing:2px;margin-bottom:8px}
+.tr{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.03)}
+.tr:last-child{border:none}
+.ti{width:18px;height:18px;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:8px;flex-shrink:0;font-family:var(--mono)}
+.ti-d{background:rgba(0,255,80,.1);color:#00ff50;border:1px solid rgba(0,255,80,.2)}
+.ti-w{background:rgba(255,200,0,.1);color:#ffc800;border:1px solid rgba(255,200,0,.2);animation:tiw 1s ease-in-out infinite}
+.ti-q{background:rgba(255,255,255,.04);color:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.07)}
+@keyframes tiw{0%,100%{opacity:1}50%{opacity:.4}}
+.tn{font-family:var(--mono);font-size:9px;color:rgba(255,255,255,.6);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* MESSAGES */
+.p-msgs{flex:1;overflow-y:auto;padding:10px 16px;display:flex;flex-direction:column;gap:7px;scrollbar-width:thin;scrollbar-color:rgba(0,255,200,.08) transparent}
+.p-msgs::-webkit-scrollbar{width:2px}
+.p-msgs::-webkit-scrollbar-thumb{background:rgba(0,255,200,.12)}
+.msg{padding:8px 11px;font-family:var(--mono);font-size:9px;line-height:1.7;max-width:93%;border-radius:2px}
+.msg.u{background:rgba(0,160,255,.1);color:#88ccff;align-self:flex-end;border:1px solid rgba(0,160,255,.2);border-radius:2px 2px 0 2px}
+.msg.a{background:rgba(0,255,200,.04);color:rgba(255,255,255,.78);align-self:flex-start;border:1px solid rgba(0,255,200,.1);border-radius:2px 2px 2px 0}
+.msg.s{background:none;color:rgba(255,255,255,.15);align-self:center;font-size:7px;letter-spacing:1px}
+.typing{display:flex;gap:4px;padding:8px 11px;background:rgba(0,255,200,.04);border:1px solid rgba(0,255,200,.1);width:42px;align-self:flex-start;border-radius:2px}
+.typing span{width:4px;height:4px;background:rgba(0,255,200,.35);border-radius:50%;animation:td .8s ease-in-out infinite}
+.typing span:nth-child(2){animation-delay:.13s}
+.typing span:nth-child(3){animation-delay:.26s}
+@keyframes td{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-4px)}}
+
+/* QUICK + INPUT */
+.p-quick{display:flex;flex-wrap:wrap;gap:5px;padding:8px 16px;border-top:1px solid rgba(255,255,255,.05);flex-shrink:0}
+.qb{font-family:var(--mono);font-size:7px;padding:4px 9px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);color:rgba(255,255,255,.4);cursor:pointer;letter-spacing:.3px;border-radius:2px;transition:all .15s}
+.qb:hover{background:rgba(0,255,200,.08);border-color:rgba(0,255,200,.25);color:#00ffc8}
+.p-input{display:flex;gap:7px;padding:10px 16px;border-top:1px solid rgba(255,255,255,.07);flex-shrink:0}
+.ci{flex:1;padding:8px 11px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);color:#fff;font-size:9px;font-family:var(--mono);outline:none;border-radius:2px}
+.ci:focus{border-color:rgba(0,255,200,.35);background:rgba(0,255,200,.03)}
+.ci::placeholder{color:rgba(255,255,255,.18)}
+.sb{padding:8px 14px;background:rgba(0,255,200,.1);border:1px solid rgba(0,255,200,.28);color:#00ffc8;font-size:7px;cursor:pointer;font-family:var(--mono);letter-spacing:1.5px;border-radius:2px;transition:all .15s}
+.sb:hover{background:rgba(0,255,200,.2)}
+
+/* API KEY SETUP */
+#setup{position:fixed;inset:0;z-index:100;background:rgba(2,4,10,.96);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(20px)}
+#setup.hidden{display:none}
+.setup-box{background:rgba(5,8,20,.98);border:1px solid rgba(0,255,200,.18);padding:40px;max-width:440px;width:90%;position:relative}
+.setup-box::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#00ffc8,transparent)}
+.setup-title{font-family:var(--orb);font-size:16px;font-weight:700;color:#fff;letter-spacing:3px;margin-bottom:6px}
+.setup-sub{font-family:var(--mono);font-size:9px;color:rgba(255,255,255,.3);letter-spacing:.5px;margin-bottom:28px;line-height:1.7}
+.setup-label{font-family:var(--mono);font-size:7px;color:rgba(0,255,200,.5);letter-spacing:2px;margin-bottom:8px}
+.setup-input{width:100%;padding:10px 12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);color:#fff;font-size:10px;font-family:var(--mono);outline:none;border-radius:2px;margin-bottom:20px}
+.setup-input:focus{border-color:rgba(0,255,200,.35)}
+.setup-input::placeholder{color:rgba(255,255,255,.15)}
+.setup-btn{width:100%;padding:12px;background:rgba(0,255,200,.12);border:1px solid rgba(0,255,200,.3);color:#00ffc8;font-family:var(--orb);font-size:9px;font-weight:700;letter-spacing:2px;cursor:pointer;border-radius:2px;transition:all .2s}
+.setup-btn:hover{background:rgba(0,255,200,.22);border-color:rgba(0,255,200,.5)}
+.setup-note{font-family:var(--mono);font-size:7px;color:rgba(255,255,255,.2);margin-top:14px;line-height:1.8;letter-spacing:.3px}
+.setup-note a{color:rgba(0,255,200,.4);text-decoration:none}
+</style>
+</head>
+<body>
+
+<!-- THREE.JS SCENE -->
+<div id="scene"></div>
+<div id="scanlines"></div>
+<div id="vignette"></div>
+
+<!-- API KEY SETUP -->
+<div id="setup">
+  <div class="setup-box">
+    <div class="setup-title">AGENTNET <em style="color:#00ffc8;font-family:var(--orb)">INIT</em></div>
+    <div class="setup-sub">Autonomous AI agent city. Four agents managing your<br>business operations — 24/7, hands-free.</div>
+    <div class="setup-label">&gt; ANTHROPIC API KEY</div>
+    <input class="setup-input" id="api-input" type="password" placeholder="sk-ant-api03-..." autocomplete="off" />
+    <button class="setup-btn" onclick="initApp()">▶ BOOT SYSTEM</button>
+    <div class="setup-note">
+      Your key is stored locally in your browser only — never sent anywhere except Anthropic's API.<br>
+      Get a key at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>
+    </div>
+  </div>
+</div>
+
+<!-- HUD -->
+<div id="hud" style="display:none">
+  <span class="logo"><em>AGENT</em><span>NET</span></span>
+  <span class="pill pg" id="sys-pill">● BOOTING</span>
+  <span class="pill pb">4 UNITS</span>
+  <span class="pill py" id="ops-pill">0 OPS</span>
+  <div id="hud-r">
+    <span id="fps">60 FPS</span>
+    <span id="clock"></span>
+  </div>
+</div>
+
+<!-- MINIMAP -->
+<div id="minimap" style="display:none">
+  <canvas id="mm-canvas" width="120" height="120"></canvas>
+  <div class="mm-bracket tl"></div>
+  <div class="mm-bracket tr"></div>
+  <div class="mm-bracket bl"></div>
+  <div class="mm-bracket br"></div>
+</div>
+
+<!-- FEED -->
+<div id="feed" style="display:none"></div>
+
+<!-- AGENT BAR -->
+<div id="agent-bar" style="display:none">
+  <div class="ab" id="ab-etsy" onclick="openPanel('etsy')">
+    <div class="ab-dot" style="background:#ff6040"></div>
+    <div class="ab-info"><div class="ab-name">ETSY</div><div class="ab-status" id="abs-etsy">IDLE</div></div>
+    <div class="ab-count" id="abc-etsy" style="color:#ff6040">×0</div>
+  </div>
+  <div class="ab" id="ab-shopify" onclick="openPanel('shopify')">
+    <div class="ab-dot" style="background:#00dd66"></div>
+    <div class="ab-info"><div class="ab-name">SHOPIFY</div><div class="ab-status" id="abs-shopify">IDLE</div></div>
+    <div class="ab-count" id="abc-shopify" style="color:#00dd66">×0</div>
+  </div>
+  <div class="ab" id="ab-social" onclick="openPanel('social')">
+    <div class="ab-dot" style="background:#cc44ff"></div>
+    <div class="ab-info"><div class="ab-name">SOCIAL</div><div class="ab-status" id="abs-social">IDLE</div></div>
+    <div class="ab-count" id="abc-social" style="color:#cc44ff">×0</div>
+  </div>
+  <div class="ab" id="ab-email" onclick="openPanel('email')">
+    <div class="ab-dot" style="background:#0099ff"></div>
+    <div class="ab-info"><div class="ab-name">EMAIL</div><div class="ab-status" id="abs-email">IDLE</div></div>
+    <div class="ab-count" id="abc-email" style="color:#0099ff">×0</div>
+  </div>
+</div>
+
+<!-- SIDE PANEL -->
+<div id="panel">
+<div id="panel-inner">
+  <div class="ph">
+    <div class="pav" id="p-av"></div>
+    <div class="p-info">
+      <div class="pn" id="p-name"></div>
+      <div class="pr" id="p-role"></div>
+      <div class="p-state" id="p-state"></div>
+    </div>
+    <button class="px" onclick="closePanel()">✕</button>
+  </div>
+  <div class="p-stats">
+    <div class="ps"><div class="psv" id="sv-ops" style="color:#00ffc8">0</div><div class="psl">OPS DONE</div></div>
+    <div class="ps"><div class="psv" id="sv-q" style="color:#ffc800">0</div><div class="psl">IN QUEUE</div></div>
+    <div class="ps"><div class="psv" id="sv-s" style="color:#00ff50;font-size:10px">ONLINE</div><div class="psl">STATUS</div></div>
+  </div>
+  <div class="p-prog">
+    <div class="prog-label"><span>&gt; EFFICIENCY</span><span id="eff-val">0%</span></div>
+    <div class="prog-bar"><div class="prog-fill" id="eff-bar" style="width:0%;background:#00ffc8"></div></div>
+    <div class="prog-label" style="margin-top:4px"><span>&gt; UPTIME</span><span id="up-val">0%</span></div>
+    <div class="prog-bar"><div class="prog-fill" id="up-bar" style="width:0%;background:#ffc800"></div></div>
+  </div>
+  <div class="p-tasks">
+    <div class="pt-head">&gt; TASK LOG</div>
+    <div id="task-log"></div>
+  </div>
+  <div class="p-msgs" id="p-msgs"></div>
+  <div class="p-quick" id="p-quick"></div>
+  <div class="p-input">
+    <input class="ci" id="ci" placeholder="> input command..." />
+    <button class="sb" onclick="sendMsg()">EXEC ▶</button>
+  </div>
+</div>
+</div>
+
+<!-- THREE.JS -->
+<script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+
+<script>
+// ── CONFIG ───────────────────────────────────────────────────────────────────
+let API_KEY = localStorage.getItem('agentnet_key') || '';
+
+const AGENT_DEFS = {
+  etsy:    { id:'etsy',    name:'ETSY-UNIT',   role:'PRODUCT OPS',   icon:'◈', col:0xff6040, colH:'#ff6040', neonH:'#ff9060', zone:[-1,1], deskPos:[-7,0,7],  tasks:[], done:0, convos:[], state:'idle', stateT:0, pos:{x:-7,z:7},  target:{x:-7,z:7},  bubble:null, bt:0, pool:['Writing product listing','Researching trends','Auditing SEO tags','Updating pricing strategy','Writing competitor analysis','Crafting product description'], quick:['Write a listing','Trending items','SEO audit','Price advice'], system:'You are an autonomous Etsy shop AI agent. Deliver completed work under 100 words: listings (title+description+price+5 tags), SEO improvements, trend reports. Output only the completed work, no preamble.' },
+  shopify: { id:'shopify', name:'SHOP-UNIT',    role:'STORE OPS',     icon:'◉', col:0x00dd66, colH:'#00dd66', neonH:'#44ffaa', zone:[1,1],  deskPos:[7,0,7],   tasks:[], done:0, convos:[], state:'idle', stateT:0, pos:{x:7,z:7},   target:{x:7,z:7},   bubble:null, bt:0, pool:['Writing cart recovery email','Optimising product page copy','Creating discount strategy','Analysing conversion funnel','Writing upsell copy','Store speed audit'], quick:['Cart recovery','Page optimise','Discount code','Store audit'], system:'You are an autonomous Shopify store AI agent. Deliver completed work under 100 words: cart emails, product copy, discount codes, conversion improvements. Output only the completed work, no preamble.' },
+  social:  { id:'social',  name:'SOC-UNIT',     role:'CONTENT OPS',   icon:'◇', col:0xcc44ff, colH:'#cc44ff', neonH:'#ff88ff', zone:[-1,-1], deskPos:[-7,0,-7], tasks:[], done:0, convos:[], state:'idle', stateT:0, pos:{x:-7,z:-7}, target:{x:-7,z:-7}, bubble:null, bt:0, pool:['Scripting TikTok hook','Writing Instagram caption','Building hashtag strategy','Planning content calendar','Writing reel script','Trend research report'], quick:['TikTok hook','IG caption','Hashtags','Content plan'], system:'You are an autonomous Social Media AI agent. Deliver completed content under 100 words: TikTok hooks, captions, hashtags, content calendars. Output only the content, no preamble.' },
+  email:   { id:'email',   name:'MAIL-UNIT',    role:'CAMPAIGN OPS',  icon:'◆', col:0x0099ff, colH:'#0099ff', neonH:'#44ccff', zone:[1,-1],  deskPos:[7,0,-7],  tasks:[], done:0, convos:[], state:'idle', stateT:0, pos:{x:7,z:-7},  target:{x:7,z:-7},  bubble:null, bt:0, pool:['Writing email campaign','Crafting subject lines','Building welcome sequence','Writing promo email','Re-engagement email draft','Newsletter copy'], quick:['Email campaign','Subject lines','Welcome flow','Promo email'], system:'You are an autonomous Email Marketing AI agent. Deliver completed emails under 100 words: subject+body, sequences, campaigns. Write naturally. Output only the email, no preamble.' },
+};
+
+// ── THREE.JS SCENE ───────────────────────────────────────────────────────────
+let scene, camera, renderer, composer, clock;
+let agentMeshes = {}, agentLights = {};
+let rainGeo, rainMat, rainMesh;
+let totalOps = 0, frameCount = 0, fpsTime = 0;
+let miniCtx, mmCanvas;
+
+function initThree() {
+  const container = document.getElementById('scene');
+  const W = window.innerWidth, H = window.innerHeight;
+
+  // Renderer
+  renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  renderer.setSize(W, H);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.8;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  container.appendChild(renderer.domElement);
+
+  // Scene
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x01020a);
+  scene.fog = new THREE.FogExp2(0x010208, 0.018);
+
+  // Camera — isometric orthographic
+  const aspect = W / H;
+  const d = 18;
+  camera = new THREE.OrthographicCamera(-d*aspect, d*aspect, d, -d, 0.1, 200);
+  camera.position.set(28, 28, 28);
+  camera.lookAt(0, 0, 0);
+
+  clock = new THREE.Clock();
+
+  // Lights
+  scene.add(new THREE.AmbientLight(0x0a0a2a, 0.4));
+  const moon = new THREE.DirectionalLight(0x2244aa, 0.3);
+  moon.position.set(10, 20, 10);
+  moon.castShadow = true;
+  moon.shadow.mapSize.set(2048, 2048);
+  moon.shadow.camera.near = 0.1;
+  moon.shadow.camera.far = 100;
+  moon.shadow.camera.left = -25; moon.shadow.camera.right = 25;
+  moon.shadow.camera.top = 25; moon.shadow.camera.bottom = -25;
+  scene.add(moon);
+
+  // Agent zone lights
+  Object.values(AGENT_DEFS).forEach(a => {
+    const light = new THREE.PointLight(a.col, 2.5, 12);
+    light.position.set(a.zone[0]*7, 3, a.zone[1]*7);
+    scene.add(light);
+    agentLights[a.id] = light;
+  });
+
+  buildCity();
+  buildCharacters();
+  buildRain();
+  buildBloom();
+  buildMinimap();
+  window.addEventListener('resize', onResize);
+}
+
+function buildCity() {
+  // Ground
+  const groundGeo = new THREE.PlaneGeometry(40, 40);
+  const groundMat = new THREE.MeshStandardMaterial({ color:0x040410, metalness:0.7, roughness:0.4 });
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI/2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // Grid lines on ground
+  const gridMat = new THREE.LineBasicMaterial({ color:0x0a0a2a });
+  for (let i = -20; i <= 20; i += 2) {
+    const gh = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-20,0.01,i), new THREE.Vector3(20,0.01,i)]);
+    const gv = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(i,0.01,-20), new THREE.Vector3(i,0.01,20)]);
+    scene.add(new THREE.Line(gh, gridMat));
+    scene.add(new THREE.Line(gv, gridMat));
+  }
+
+  // Roads (cross)
+  const roadMat = new THREE.MeshStandardMaterial({ color:0x050510, metalness:0.5, roughness:0.8 });
+  const roadH = new THREE.Mesh(new THREE.BoxGeometry(40,0.05,3.5), roadMat);
+  roadH.position.set(0, 0.02, 0); scene.add(roadH);
+  const roadV = new THREE.Mesh(new THREE.BoxGeometry(3.5,0.05,40), roadMat);
+  roadV.position.set(0, 0.02, 0); scene.add(roadV);
+
+  // Road lane markings
+  const laneMat = new THREE.MeshBasicMaterial({ color:0xffcc00, transparent:true, opacity:0.08 });
+  for (let i = -18; i <= 18; i += 3) {
+    const lm = new THREE.Mesh(new THREE.BoxGeometry(2,0.06,0.1), laneMat);
+    lm.position.set(i, 0.03, 0); scene.add(lm);
+    const lv = new THREE.Mesh(new THREE.BoxGeometry(0.1,0.06,2), laneMat);
+    lv.position.set(0, 0.03, i); scene.add(lv);
+  }
+
+  // Buildings — procedural, 4 quadrants
+  const buildingColors = [0x0a0a1e, 0x080816, 0x0c0c22, 0x06060f];
+  const neonEdgeColors = { etsy:0xff6040, shopify:0x00dd66, social:0xcc44ff, email:0x0099ff };
+  const quadrants = [
+    { id:'etsy',    xr:[-14,-3], zr:[3,14]   },
+    { id:'shopify', xr:[3,14],   zr:[3,14]   },
+    { id:'social',  xr:[-14,-3], zr:[-14,-3] },
+    { id:'email',   xr:[3,14],   zr:[-14,-3] },
+  ];
+
+  quadrants.forEach(q => {
+    const neon = neonEdgeColors[q.id];
+    const ag = AGENT_DEFS[q.id];
+    // Zone floor tint
+    const zoneMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(ag.col).multiplyScalar(0.03), metalness:0.6, roughness:0.6 });
+    const zonePlane = new THREE.Mesh(new THREE.PlaneGeometry(11,11), zoneMat);
+    zonePlane.rotation.x = -Math.PI/2;
+    zonePlane.position.set((q.xr[0]+q.xr[1])/2, 0.015, (q.zr[0]+q.zr[1])/2);
+    scene.add(zonePlane);
+
+    // Buildings grid
+    for (let x = q.xr[0]; x < q.xr[1]; x += 2.2) {
+      for (let z = q.zr[0]; z < q.zr[1]; z += 2.2) {
+        if (Math.abs(x) < 2.5 || Math.abs(z) < 2.5) continue;
+        if (Math.random() < 0.2) continue;
+        const h = 1 + Math.random() * 7;
+        const w = 1.2 + Math.random() * 0.6;
+        const bMat = new THREE.MeshStandardMaterial({ color: buildingColors[Math.floor(Math.random()*4)], metalness:0.8, roughness:0.4 });
+        const bGeo = new THREE.BoxGeometry(w, h, w);
+        const bMesh = new THREE.Mesh(bGeo, bMat);
+        bMesh.position.set(x + (Math.random()-.5)*.5, h/2, z + (Math.random()-.5)*.5);
+        bMesh.castShadow = true; bMesh.receiveShadow = true;
+        scene.add(bMesh);
+
+        // Neon edge trim on building top
+        const trimMat = new THREE.MeshBasicMaterial({ color: neon });
+        const trim = new THREE.Mesh(new THREE.BoxGeometry(w+0.06, 0.06, w+0.06), trimMat);
+        trim.position.set(x + (Math.random()-.5)*.5, h + 0.03, z + (Math.random()-.5)*.5);
+        scene.add(trim);
+
+        // Emissive windows
+        const winCount = Math.floor(h * 1.5);
+        const winMat = new THREE.MeshBasicMaterial({ color: Math.random() < 0.3 ? neon : 0xffcc88, transparent:true, opacity: 0.6 + Math.random()*0.4 });
+        for (let wi = 0; wi < winCount; wi++) {
+          const wy = 0.5 + wi * 0.7;
+          if (wy >= h - 0.3) continue;
+          const wm = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.25), winMat);
+          wm.position.set(x+(Math.random()-.5)*.5 + w/2+0.01, wy, z+(Math.random()-.5)*.5 + (Math.random()-.5)*w*.8);
+          wm.rotation.y = Math.PI/2;
+          scene.add(wm);
+        }
+      }
+    }
+
+    // Terminal/desk platform for agent
+    const desk = AGENT_DEFS[q.id];
+    const platMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(desk.col).multiplyScalar(0.15), emissive: new THREE.Color(desk.col).multiplyScalar(0.05), metalness:0.9, roughness:0.3 });
+    const plat = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.15, 2.5), platMat);
+    plat.position.set(desk.deskPos[0], 0.08, desk.deskPos[2]);
+    scene.add(plat);
+
+    // Monitor
+    const monMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(desk.col).multiplyScalar(0.8) });
+    const mon = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.7, 0.08), monMat);
+    mon.position.set(desk.deskPos[0], 0.6, desk.deskPos[2] - 0.6);
+    scene.add(mon);
+
+    // Monitor screen glow
+    const screenMat = new THREE.MeshBasicMaterial({ color: desk.col, transparent:true, opacity:0.9 });
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.85, 0.55), screenMat);
+    screen.position.set(desk.deskPos[0], 0.62, desk.deskPos[2] - 0.56);
+    scene.add(screen);
+  });
+}
+
+function buildCharacters() {
+  Object.values(AGENT_DEFS).forEach(a => {
+    const group = new THREE.Group();
+
+    const col = new THREE.Color(a.col);
+    const darkCol = col.clone().multiplyScalar(0.3);
+    const neonCol = new THREE.Color(a.col).lerp(new THREE.Color(0xffffff), 0.4);
+
+    // Shadow disc
+    const shadowMat = new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:0.3 });
+    const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.4, 16), shadowMat);
+    shadow.rotation.x = -Math.PI/2; shadow.position.y = 0.01;
+    group.add(shadow);
+
+    // Legs
+    const legMat = new THREE.MeshStandardMaterial({ color:0x111122, metalness:0.7, roughness:0.5 });
+    const bootMat = new THREE.MeshStandardMaterial({ color:0x080810 });
+    const legGeo = new THREE.CylinderGeometry(0.12, 0.1, 0.5, 8);
+    const bootGeo = new THREE.BoxGeometry(0.22, 0.18, 0.28);
+    const legL = new THREE.Mesh(legGeo, legMat); legL.position.set(-0.18, 0.4, 0); group.add(legL);
+    const legR = new THREE.Mesh(legGeo, legMat); legR.position.set(0.18, 0.4, 0); group.add(legR);
+    const bootL = new THREE.Mesh(bootGeo, bootMat); bootL.position.set(-0.18, 0.15, 0.04); group.add(bootL);
+    const bootR = new THREE.Mesh(bootGeo, bootMat); bootR.position.set(0.18, 0.15, 0.04); group.add(bootR);
+
+    // Neon boot trim
+    const neonTrimMat = new THREE.MeshBasicMaterial({ color: a.col });
+    const trimL = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.03, 0.3), neonTrimMat); trimL.position.set(-0.18, 0.24, 0.04); group.add(trimL);
+    const trimR = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.03, 0.3), neonTrimMat); trimR.position.set(0.18, 0.24, 0.04); group.add(trimR);
+
+    // Body
+    const bodyGeo = new THREE.BoxGeometry(0.6, 0.6, 0.42);
+    const bodyMat = new THREE.MeshStandardMaterial({ color: darkCol, metalness:0.8, roughness:0.3 });
+    const body = new THREE.Mesh(bodyGeo, bodyMat); body.position.y = 0.96; group.add(body);
+
+    // Jacket layer
+    const jacketGeo = new THREE.BoxGeometry(0.52, 0.52, 0.38);
+    const jacketMat = new THREE.MeshStandardMaterial({ color: col, metalness:0.6, roughness:0.5 });
+    const jacket = new THREE.Mesh(jacketGeo, jacketMat); jacket.position.y = 0.96; group.add(jacket);
+
+    // Shoulder pads
+    const shoulderMat = new THREE.MeshStandardMaterial({ color: darkCol, metalness:0.9, roughness:0.2 });
+    const spGeo = new THREE.BoxGeometry(0.2, 0.18, 0.34);
+    const spL = new THREE.Mesh(spGeo, shoulderMat); spL.position.set(-0.37, 1.1, 0); group.add(spL);
+    const spR = new THREE.Mesh(spGeo, shoulderMat); spR.position.set(0.37, 1.1, 0); group.add(spR);
+    const spTrimL = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.03, 0.36), neonTrimMat); spTrimL.position.set(-0.37, 1.19, 0); group.add(spTrimL);
+    const spTrimR = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.03, 0.36), neonTrimMat); spTrimR.position.set(0.37, 1.19, 0); group.add(spTrimR);
+
+    // Chest badge
+    const badgeMat = new THREE.MeshBasicMaterial({ color: a.col });
+    const badge = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.12, 0.05), badgeMat); badge.position.set(0, 0.96, 0.22); group.add(badge);
+
+    // Arms
+    const armGeo = new THREE.CylinderGeometry(0.1, 0.08, 0.5, 8);
+    const armMat = new THREE.MeshStandardMaterial({ color: darkCol, metalness:0.8, roughness:0.3 });
+    const armL = new THREE.Group(); armL.position.set(-0.38, 0.96, 0);
+    const armLMesh = new THREE.Mesh(armGeo, armMat); armLMesh.position.y = -0.28; armL.add(armLMesh);
+    const armR = new THREE.Group(); armR.position.set(0.38, 0.96, 0);
+    const armRMesh = new THREE.Mesh(armGeo, armMat); armRMesh.position.y = -0.28; armR.add(armRMesh);
+    // Hands
+    const handMat = new THREE.MeshStandardMaterial({ color: col.clone().multiplyScalar(0.6), metalness:0.9 });
+    const handL = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), handMat); handL.position.y = -0.56; armL.add(handL);
+    const handR = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), handMat); handR.position.y = -0.56; armR.add(handR);
+    group.add(armL); group.add(armR);
+
+    // Neck
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.18, 8), bodyMat);
+    neck.position.y = 1.37; group.add(neck);
+
+    // Head (helmet)
+    const headGeo = new THREE.BoxGeometry(0.52, 0.48, 0.46);
+    const headMat = new THREE.MeshStandardMaterial({ color:0x0c0c1e, metalness:0.9, roughness:0.2 });
+    const head = new THREE.Mesh(headGeo, headMat); head.position.y = 1.7; group.add(head);
+
+    // Head top detail
+    const topMat = new THREE.MeshStandardMaterial({ color: darkCol, metalness:0.95 });
+    const headTop = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.1, 0.42), topMat); headTop.position.y = 1.94; group.add(headTop);
+
+    // Ear pieces
+    const earMat = new THREE.MeshStandardMaterial({ color: darkCol, metalness:0.9 });
+    const earL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.2, 0.16), earMat); earL.position.set(-0.29, 1.7, 0); group.add(earL);
+    const earR = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.2, 0.16), earMat); earR.position.set(0.29, 1.7, 0); group.add(earR);
+    const earTrimL = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.22, 0.18), neonTrimMat); earTrimL.position.set(-0.29, 1.7, 0); group.add(earTrimL);
+    const earTrimR = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.22, 0.18), neonTrimMat); earTrimR.position.set(0.29, 1.7, 0); group.add(earTrimR);
+
+    // VISOR — key feature, glowing
+    const visorMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(a.col).lerp(new THREE.Color(0xffffff), 0.5) });
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.18, 0.06), visorMat);
+    visor.position.set(0, 1.7, 0.24); group.add(visor);
+
+    // Visor inner dark
+    const visorInner = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.14, 0.04), new THREE.MeshBasicMaterial({ color:0x000010, transparent:true, opacity:0.8 }));
+    visorInner.position.set(0, 1.7, 0.27); group.add(visorInner);
+
+    // Agent-specific antenna (social) or top detail
+    if (a.id === 'social') {
+      const antMat = new THREE.MeshBasicMaterial({ color: a.col });
+      const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.4, 6), antMat);
+      ant.position.set(0.12, 2.15, 0); group.add(ant);
+      const antTip = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), antMat);
+      antTip.position.set(0.12, 2.35, 0); group.add(antTip);
+    }
+
+    // Position
+    group.position.set(a.pos.x, 0, a.pos.z);
+    scene.add(group);
+
+    // Store refs
+    agentMeshes[a.id] = { group, armL, armR, legL, legR, visor, badge, light: agentLights[a.id], body };
+    a.mesh = group;
+    a._frame = 0;
+  });
+}
+
+function buildRain() {
+  const count = 3000;
+  const positions = new Float32Array(count * 3);
+  for (let i = 0; i < count * 3; i += 3) {
+    positions[i]   = (Math.random() - 0.5) * 50;
+    positions[i+1] = Math.random() * 30;
+    positions[i+2] = (Math.random() - 0.5) * 50;
+  }
+  rainGeo = new THREE.BufferGeometry();
+  rainGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  rainMat = new THREE.PointsMaterial({ color:0x4488bb, size:0.06, transparent:true, opacity:0.35 });
+  rainMesh = new THREE.Points(rainGeo, rainMat);
+  scene.add(rainMesh);
+}
+
+function buildBloom() {
+  composer = new THREE.EffectComposer(renderer);
+  composer.addPass(new THREE.RenderPass(scene, camera));
+  const bloom = new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.2, 0.5, 0.75);
+  composer.addPass(bloom);
+}
+
+function buildMinimap() {
+  mmCanvas = document.getElementById('mm-canvas');
+  miniCtx = mmCanvas.getContext('2d');
+}
+
+function drawMinimap() {
+  if (!miniCtx) return;
+  const W = 120, H = 120;
+  miniCtx.clearRect(0, 0, W, H);
+  miniCtx.fillStyle = 'rgba(2,4,12,0.8)';
+  miniCtx.fillRect(0, 0, W, H);
+  // Grid
+  miniCtx.strokeStyle = 'rgba(0,255,200,0.06)'; miniCtx.lineWidth = 0.5;
+  for (let i = 0; i < W; i += 12) { miniCtx.beginPath(); miniCtx.moveTo(i,0); miniCtx.lineTo(i,H); miniCtx.stroke(); }
+  for (let i = 0; i < H; i += 12) { miniCtx.beginPath(); miniCtx.moveTo(0,i); miniCtx.lineTo(W,i); miniCtx.stroke(); }
+  // Roads
+  miniCtx.fillStyle = 'rgba(0,0,0,0.5)';
+  miniCtx.fillRect(0, H/2-4, W, 8); miniCtx.fillRect(W/2-4, 0, 8, H);
+  // Agent dots
+  Object.values(AGENT_DEFS).forEach(a => {
+    const mx = (a.pos.x + 20) / 40 * W;
+    const my = (a.pos.z + 20) / 40 * H;
+    miniCtx.shadowBlur = 8; miniCtx.shadowColor = a.colH;
+    miniCtx.fillStyle = a.colH;
+    miniCtx.beginPath(); miniCtx.arc(mx, my, a.state === 'work' ? 4 : 3, 0, Math.PI*2); miniCtx.fill();
+    miniCtx.shadowBlur = 0;
+    // Agent label
+    miniCtx.fillStyle = 'rgba(255,255,255,0.4)'; miniCtx.font = '5px Share Tech Mono,monospace'; miniCtx.textAlign = 'center';
+    miniCtx.fillText(a.id.slice(0,3).toUpperCase(), mx, my - 5);
+  });
+}
+
+// ── ANIMATION LOOP ───────────────────────────────────────────────────────────
+function animate() {
+  requestAnimationFrame(animate);
+  const delta = clock.getDelta();
+  const t = clock.getElapsedTime();
+
+  // FPS counter
+  frameCount++;
+  fpsTime += delta;
+  if (fpsTime >= 1) {
+    document.getElementById('fps').textContent = Math.round(frameCount / fpsTime) + ' FPS';
+    frameCount = 0; fpsTime = 0;
+  }
+
+  // Animate agents
+  Object.values(AGENT_DEFS).forEach(a => {
+    const m = agentMeshes[a.id];
+    if (!m) return;
+    a._frame = (a._frame || 0) + delta * 60;
+    const f = a._frame;
+
+    // Move towards target
+    const dx = a.target.x - a.pos.x, dz = a.target.z - a.pos.z;
+    const dist = Math.sqrt(dx*dx + dz*dz);
+    if (dist > 0.08) {
+      const speed = 2.5 * delta;
+      a.pos.x += (dx/dist) * speed;
+      a.pos.z += (dz/dist) * speed;
+      a.state_move = 'walk';
+      // Face direction
+      m.group.rotation.y = Math.atan2(dx, dz);
+    } else {
+      a.state_move = 'still';
+    }
+    m.group.position.set(a.pos.x, 0, a.pos.z);
+
+    // Walk animation
+    if (a.state_move === 'walk') {
+      const swing = Math.sin(f * 0.18) * 0.4;
+      m.armL.rotation.x = swing; m.armR.rotation.x = -swing;
+      m.legL.rotation.x = -swing * 0.8; m.legR.rotation.x = swing * 0.8;
+      m.group.position.y = Math.abs(Math.sin(f * 0.18)) * 0.05;
+    } else if (a.state === 'work') {
+      // Typing animation
+      m.armL.rotation.x = -0.4 + Math.sin(t*8) * 0.15;
+      m.armR.rotation.x = -0.4 - Math.sin(t*8) * 0.15;
+      m.legL.rotation.x = 0; m.legR.rotation.x = 0;
+      m.group.position.y = 0;
+    } else {
+      // Idle breathe
+      m.armL.rotation.x = Math.sin(t*1.2) * 0.04;
+      m.armR.rotation.x = -Math.sin(t*1.2) * 0.04;
+      m.legL.rotation.x = 0; m.legR.rotation.x = 0;
+      m.group.position.y = Math.sin(t*1.5) * 0.02;
+    }
+
+    // Visor glow pulse
+    const visorBright = a.state === 'work' ? 0.7 + Math.sin(t*6)*0.3 : 0.45 + Math.sin(t*1.5)*0.1;
+    const vc = new THREE.Color(a.col).lerp(new THREE.Color(0xffffff), visorBright * 0.5);
+    m.visor.material.color = vc;
+
+    // Agent light pulse
+    if (agentLights[a.id]) {
+      agentLights[a.id].intensity = a.state === 'work' ? 3 + Math.sin(t*4)*1 : 1.5 + Math.sin(t*1.5)*0.5;
+    }
+
+    // State timer
+    a.stateT -= delta;
+    if (a.bt > 0) a.bt -= delta; else a.bubble = null;
+  });
+
+  // Rain
+  if (rainGeo) {
+    const pos = rainGeo.attributes.position.array;
+    for (let i = 1; i < pos.length; i += 3) {
+      pos[i] -= 12 * delta;
+      if (pos[i] < -1) pos[i] = 25 + Math.random() * 5;
+    }
+    rainGeo.attributes.position.needsUpdate = true;
+    rainMesh.rotation.y = t * 0.01;
+  }
+
+  // Clock
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+
+  // Minimap
+  drawMinimap();
+
+  // Render with bloom
+  composer ? composer.render() : renderer.render(scene, camera);
+}
+
+function onResize() {
+  const W = window.innerWidth, H = window.innerHeight;
+  const aspect = W / H, d = 18;
+  camera.left = -d*aspect; camera.right = d*aspect;
+  camera.updateProjectionMatrix();
+  renderer.setSize(W, H);
+  if (composer) composer.setSize(W, H);
+}
+
+// ── AGENT TASK SYSTEM ────────────────────────────────────────────────────────
+function pickTask(a) {
+  const name = a.pool[Math.floor(Math.random() * a.pool.length)];
+  // Walk to desk first
+  a.target.x = a.deskPos[0];
+  a.target.z = a.deskPos[2];
+  a.state = 'walk';
+  const task = { name, state:'working', id:Date.now() };
+  a.tasks.unshift(task);
+  if (a.tasks.length > 5) a.tasks.pop();
+  a.bubble = name.slice(0,14);
+  a.bt = 2.5;
+  a.stateT = 1.5;
+  addFeed(a, name);
+  document.getElementById('abs-'+a.id).textContent = 'WORKING';
+  document.getElementById('abs-'+a.id).style.color = '#ffc800';
+  runAgentTask(a, task);
+}
+
+async function runAgentTask(a, task) {
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'x-api-key': API_KEY, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
+      body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:300, system:a.system, messages:[{role:'user',content:`Execute task: ${task.name}. Output completed work only.`}] })
+    });
+    const d = await r.json();
+    task.result = d.content?.find(b=>b.type==='text')?.text || 'Task completed.';
+    task.state = 'done';
+  } catch(e) {
+    task.state = 'done';
+    task.result = 'Task complete.';
+  }
+}
+
+function completeTask(a) {
+  a.tasks.filter(t=>t.state==='working').forEach(t=>t.state='done');
+  a.done++; totalOps++;
+  a.bubble = 'DONE ✓'; a.bt = 2;
+  document.getElementById('ops-pill').textContent = totalOps + ' OPS';
+  document.getElementById('abc-'+a.id).textContent = '×'+a.done;
+  document.getElementById('abs-'+a.id).textContent = 'IDLE';
+  document.getElementById('abs-'+a.id).style.color = '';
+  // Wander in zone
+  const zoneRanges = { etsy:{x:[-14,-3],z:[3,14]}, shopify:{x:[3,14],z:[3,14]}, social:{x:[-14,-3],z:[-14,-3]}, email:{x:[3,14],z:[-14,-3]} };
+  const zr = zoneRanges[a.id];
+  let wx, wz, tries = 0;
+  do { wx = zr.x[0] + Math.random()*(zr.x[1]-zr.x[0]); wz = zr.z[0] + Math.random()*(zr.z[1]-zr.z[0]); tries++; }
+  while ((Math.abs(wx)<2||Math.abs(wz)<2) && tries<20);
+  a.target.x = wx; a.target.z = wz;
+  a.state = 'done'; a.stateT = 2 + Math.random()*4;
+  if (ACTIVE_AGENT === a.id) updatePanel();
+}
+
+// Auto-loop
+function agentLoop(a) {
+  if (a.state === 'walk') {
+    const dx = a.target.x - a.pos.x, dz = a.target.z - a.pos.z;
+    if (Math.sqrt(dx*dx+dz*dz) < 0.2) {
+      if (a.tasks.some(t=>t.state==='working')) { a.state='work'; a.stateT = 3 + Math.random()*5; }
+      else { a.state='idle'; a.stateT = 1; }
+    }
+  }
+  if (a.state === 'work' && a.stateT <= 0) completeTask(a);
+  if ((a.state === 'idle' || a.state === 'done') && a.stateT <= 0) pickTask(a);
+}
+setInterval(() => { Object.values(AGENT_DEFS).forEach(agentLoop); }, 100);
+
+function addFeed(a, name) {
+  const feed = document.getElementById('feed');
+  const el = document.createElement('div');
+  el.className = 'fi';
+  el.innerHTML = `<div class="fd" style="background:${a.colH}"></div>${a.name} &gt; ${name}`;
+  feed.insertBefore(el, feed.firstChild);
+  while (feed.children.length > 5) feed.removeChild(feed.lastChild);
+}
+
+// ── PANEL ────────────────────────────────────────────────────────────────────
+let ACTIVE_AGENT = null;
+
+function openPanel(id) {
+  ACTIVE_AGENT = id;
+  const a = AGENT_DEFS[id];
+  document.querySelectorAll('.ab').forEach(b => b.classList.remove('active'));
+  document.getElementById('ab-'+id).classList.add('active');
+  document.getElementById('ab-'+id).style.setProperty('--ab-col', a.colH);
+
+  const av = document.getElementById('p-av');
+  av.textContent = a.icon;
+  av.style.cssText = `width:44px;height:44px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;background:${a.colH}22;border:1px solid ${a.colH}44;color:${a.colH};`;
+  document.getElementById('p-name').textContent = a.name;
+  document.getElementById('p-role').textContent = a.role;
+  document.getElementById('p-quick').innerHTML = a.quick.map(q=>`<button class="qb" onclick="qa('${q.replace(/'/g,"\\'")}')">▶ ${q}</button>`).join('');
+  document.getElementById('panel').classList.add('open');
+  updatePanel();
+  renderMsgs();
+}
+
+function closePanel() {
+  ACTIVE_AGENT = null;
+  document.querySelectorAll('.ab').forEach(b => b.classList.remove('active'));
+  document.getElementById('panel').classList.remove('open');
+}
+
+function updatePanel() {
+  if (!ACTIVE_AGENT) return;
+  const a = AGENT_DEFS[ACTIVE_AGENT];
+  document.getElementById('sv-ops').textContent = a.done;
+  document.getElementById('sv-q').textContent = a.tasks.filter(t=>t.state==='working').length;
+  const ss = document.getElementById('sv-s');
+  ss.textContent = a.state.toUpperCase();
+  ss.style.color = a.state==='work'?'#ffc800':a.state==='walk'?'#00ff88':'#00ffc8';
+
+  const eff = Math.min(100, a.done * 8 + 10);
+  document.getElementById('eff-val').textContent = eff+'%';
+  document.getElementById('eff-bar').style.width = eff+'%';
+  document.getElementById('eff-bar').style.background = a.colH;
+  const up = Math.min(100, 40 + a.done * 5);
+  document.getElementById('up-val').textContent = up+'%';
+  document.getElementById('up-bar').style.width = up+'%';
+
+  document.getElementById('task-log').innerHTML = a.tasks.slice(0,4).map(t=>`
+    <div class="tr"><div class="ti ${t.state==='done'?'ti-d':t.state==='working'?'ti-w':'ti-q'}">${t.state==='done'?'✓':t.state==='working'?'◉':'○'}</div>
+    <div class="tn">${t.name}</div></div>`).join('') || `<div style="font-size:7px;color:rgba(255,255,255,.12);padding:4px 0;font-family:var(--mono)">NO TASKS YET</div>`;
+}
+
+function renderMsgs() {
+  if (!ACTIVE_AGENT) return;
+  const a = AGENT_DEFS[ACTIVE_AGENT];
+  const box = document.getElementById('p-msgs');
+  if (!a.convos.length) { box.innerHTML='<div class="msg s">— UNIT AWAITING INPUT —</div>'; return; }
+  box.innerHTML = a.convos.map(m=>`<div class="msg ${m.role==='user'?'u':'a'}">${m.content.replace(/</g,'&lt;')}</div>`).join('');
+  box.scrollTop = box.scrollHeight;
+}
+function showTyp() { const b=document.getElementById('p-msgs'); const e=document.createElement('div'); e.className='typing'; e.id='typing'; e.innerHTML='<span></span><span></span><span></span>'; b.appendChild(e); b.scrollTop=b.scrollHeight; }
+function hideTyp() { const e=document.getElementById('typing'); if(e) e.remove(); }
+function qa(t) { document.getElementById('ci').value=t; sendMsg(); }
+
+let msgBusy = false;
+async function sendMsg() {
+  const inp = document.getElementById('ci');
+  const text = inp.value.trim();
+  if (!text || msgBusy || !ACTIVE_AGENT) return;
+  const a = AGENT_DEFS[ACTIVE_AGENT]; inp.value = '';
+  a.convos.push({ role:'user', content:text });
+  renderMsgs(); showTyp(); msgBusy = true;
+  a.bubble = text.slice(0,12); a.bt = 3;
+  const msgs = a.convos.map(m=>({ role:m.role==='user'?'user':'assistant', content:m.content }));
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'x-api-key':API_KEY, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
+      body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:500, system:a.system, messages:msgs })
+    });
+    const d = await r.json();
+    const rep = d.content?.find(b=>b.type==='text')?.text || (d.error?.message || 'ERROR');
+    hideTyp(); a.convos.push({ role:'agent', content:rep }); a.bubble='REPLIED'; a.bt=1.5; renderMsgs();
+  } catch(e) { hideTyp(); a.convos.push({ role:'agent', content:'CONNECTION ERROR' }); renderMsgs(); }
+  msgBusy = false;
+}
+document.getElementById('ci').addEventListener('keydown', e => { if(e.key==='Enter') sendMsg(); });
+
+// ── BOOT ─────────────────────────────────────────────────────────────────────
+function initApp() {
+  const key = document.getElementById('api-input').value.trim();
+  if (!key || !key.startsWith('sk-')) { alert('Please enter a valid Anthropic API key (starts with sk-)'); return; }
+  API_KEY = key;
+  localStorage.setItem('agentnet_key', key);
+  document.getElementById('setup').classList.add('hidden');
+  document.getElementById('hud').style.display = '';
+  document.getElementById('minimap').style.display = '';
+  document.getElementById('feed').style.display = '';
+  document.getElementById('agent-bar').style.display = '';
+  document.getElementById('sys-pill').textContent = '● ONLINE';
+  initThree();
+  animate();
+  setTimeout(()=>pickTask(AGENT_DEFS.etsy), 800);
+  setTimeout(()=>pickTask(AGENT_DEFS.shopify), 1600);
+  setTimeout(()=>pickTask(AGENT_DEFS.social), 2400);
+  setTimeout(()=>pickTask(AGENT_DEFS.email), 3200);
+}
+
+// Auto-load if key exists
+if (API_KEY) {
+  document.getElementById('api-input').value = API_KEY;
+  setTimeout(initApp, 100);
+}
+</script>
+</body>
+</html>
